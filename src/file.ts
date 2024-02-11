@@ -1,16 +1,17 @@
 import fs from "fs";
 import path from "path";
-export function getFiles(dir: string) {
-  let files: string[] = [];
-  const fileAndFolderList = fs.readdirSync(dir);
-  for (const file of fileAndFolderList) {
-    const name = path.join(dir,file);
-    if (fs.statSync(name).isDirectory()) {
-      const subfiles = getFiles(name);
-      files.push(...subfiles);
+
+export const getAllFiles = (folderPath: string) => {
+  let response: string[] = [];
+
+  const allFilesAndFolders = fs.readdirSync(folderPath);
+  allFilesAndFolders.forEach((file) => {
+    const fullFilePath = path.join(folderPath, file);
+    if (fs.statSync(fullFilePath).isDirectory()) {
+      response = response.concat(getAllFiles(fullFilePath));
     } else {
-      files.push(name);
+      response.push(fullFilePath);
     }
-  }
-  return files;
-}
+  });
+  return response;
+};

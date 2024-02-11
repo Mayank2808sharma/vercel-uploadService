@@ -2,38 +2,49 @@ import express from "express";
 import cors from "cors";
 import simpleGit from "simple-git";
 import { generate } from "./utils";
-import { getFiles } from "./file";
-import { uploadFile } from "./aws";
+import { getAllFiles } from "./file";
 import path from "path";
+import { uploadFile } from "./aws";
 import { createClient } from "redis";
+const publisher = createClient();
+publisher.connect();
+
+const subscriber = createClient();
+subscriber.connect();
+
 const app = express();
-const client = createClient();
-client.connect();
 app.use(cors());
 app.use(express.json());
 
-app.get("/", (req: any, res: any) => {
-  return res.json({ msg: "success" });
-});
-
-app.post("/deploy", async (req: any, res: any) => {
+app.post("/deploy", async (req, res) => {
   const repoUrl = req.body.repoUrl;
-  if (!repoUrl) {
-    return res.json({ msg: "No file recieved", status: 400 });
-  }
-  console.log(repoUrl);
-  const id = generate();
+  const id = generate(); // asd12
   await simpleGit().clone(repoUrl, path.join(__dirname, `output/${id}`));
-  const files = getFiles(path.join(__dirname, `output/${id}`));
-  files.forEach((file) => {
+
+  const files = getAllFiles(path.join(__dirname, `output/${id}`));
+
+  files.forEach(async (file) => {
     const filename = path.relative(__dirname, file).replace(/\\/g, "/");
-    uploadFile(filename, file);
+    await uploadFile(filename, file);
   });
-  client.lPush("build-queue", id);
-  return res.json({ msg: "recieved file", id, status: 200 });
+
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+  publisher.lPush("build-queue", id);
+  // INSERT => SQL
+  // .create =>
+  publisher.hSet("status", id, "uploaded");
+
+  res.json({
+    id: id,
+  });
 });
 
-app.listen(3000, () => {
-  console.log("server started on port 3000");
+app.get("/status", async (req, res) => {
+  const id = req.query.id;
+  const response = await subscriber.hGet("status", id as string);
+  res.json({
+    status: response,
+  });
 });
-// tsc -b to run convert the tsc file into js
+
+app.listen(3000);
